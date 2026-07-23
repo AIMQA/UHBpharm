@@ -710,6 +710,45 @@ const QUESTIONS = [{"i":1,"c":"Anticoagulation","p":"1","q":"A 78-year-old woman
 /* ================= HELPERS ================= */
 const $ = (id)=>document.getElementById(id);
 const LETTERS=['A','B','C','D','E'];
+
+/* ===== Answer-key position balancing =====================================
+   The authored bank placed 81% of correct answers at position B, and E was never
+   correct — a candidate who always picked B would have scored 81% without reading
+   a single stem. Each question's options are therefore permuted at load by a
+   Fisher-Yates shuffle seeded from an FNV-1a hash of the question stem.
+
+   The permutation is a pure function of the stem text, so it is stable across
+   reloads and identical on every device. That matters for team mode: the host
+   screen and every player's phone must show the same lettering, and Firebase
+   stores answers by letter. The correct-answer letter and the why-wrong
+   rationale keys are remapped in lockstep with the options.
+   ======================================================================== */
+function fnv1a(str){
+  let h=0x811c9dc5;
+  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+  return h>>>0;
+}
+function seededOrder(n,seed){
+  let s=(seed||1)>>>0;
+  const rnd=()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};
+  const idx=[];for(let i=0;i<n;i++)idx.push(i);
+  for(let i=n-1;i>0;i--){const j=Math.floor(rnd()*(i+1));const t=idx[i];idx[i]=idx[j];idx[j]=t;}
+  return idx;
+}
+(function balanceAnswerKeys(){
+  QUESTIONS.forEach(function(q){
+    if(!q.o||q.o.length<2)return;
+    const order=seededOrder(q.o.length,fnv1a(q.q));
+    const opts=[],w={};let x=q.x;
+    order.forEach(function(oldIdx,newIdx){
+      opts.push(q.o[oldIdx]);
+      const oldL=LETTERS[oldIdx],newL=LETTERS[newIdx];
+      if(oldL===q.x)x=newL;
+      else if(q.w&&q.w[oldL]!==undefined)w[newL]=q.w[oldL];
+    });
+    q.o=opts;q.x=x;q.w=w;
+  });
+})();
 const RING_CIRC = 2*Math.PI*86;
 
 function shuffle(a){const x=a.slice();for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
